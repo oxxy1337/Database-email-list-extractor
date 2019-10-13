@@ -1,0 +1,100 @@
+#! /usr/bin/env php
+<?php
+error_reporting(0);
+$options = getopt('h:u:p:f:');
+
+if (($options['h'] == "") || ($options['u'] == "") || ($options['p'] == "")|| ($options['f'] == "")) 
+    die(huse());
+
+try{
+    $extract = new MaillistExtact($options['u'],$options['p'],$options['h']);
+
+}catch(Exception $e){
+    die("MySQl Connection Error : ".$e->getMessage() ."\n");
+}
+
+print($extract->go($options['f']) . " Email saved in :".$options['f']."\n");
+
+
+
+
+class MaillistExtact
+{
+    private $con;
+
+    function __construct($user,$pass,$host)
+    {
+         
+        mysqli_report(MYSQLI_REPORT_STRICT);
+        if (!mysqli_connect($host,$user,$pass)) {
+            throw new Exception();
+            
+        }else{
+            $this->con =mysqli_connect($host,$user,$pass);
+        }
+    }
+
+    
+    public function getdata($sql)
+    {
+
+        $q = mysqli_query($this->con,$sql);
+        $result = array();
+        while($d = mysqli_fetch_array($q)){
+            $result[] = $d[0];
+        }
+        return $result;
+    }
+
+    public function go($file)
+    {
+        $fp = fopen($file,'a');
+        try{
+            if (!$fp) {
+                throw new Exception("Could not open the file!");
+            }
+        }catch(Exception $e){
+            die("Error (File: ".$e->getFile()."): ".$e->getMessage()."\n");
+        }
+
+
+        $count = 0;
+        $databases = $this->getdata("SHOW DATABASES");
+        print("Extracting ...\nPlease wait ...\n");
+        foreach($databases as $database){
+            $tables = $this->getdata("SHOW TABLES FROM $database");
+            foreach($tables as $table){
+                $columns = $this->getdata("SHOW COLUMNS FROM $database.$table");
+                foreach($columns as $column){
+                    $emails = $this->getdata("SELECT $column FROM  $database.$table WHERE $column REGEXP '[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]'");
+                    foreach($emails as $email){
+                        if(filter_var($email, FILTER_VALIDATE_EMAIL)){
+                            if(preg_match($email,file_get_contents($file))) continue;
+                            $count++;
+                            fwrite($fp,"$email\n");
+                            
+                        }else{
+                            foreach(preg_split("/\s/",$text) as $string){
+                                if(filter_var($string,FILTER_VALIDATE_EMAIL)){
+                                    if(preg_match($string,file_get_contents($file))) continue;
+                                    $count++;
+                                    fwrite($fp,"$string\n");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        fclose($fp);
+        mysqli_close($this->con);
+        return $count;
+    }
+}
+    
+function huse() {
+
+    return "Usage: ./Extractor [options] \n Options : \n -h MySQl Hostname (e.g. 47.102.85.92) \n -u MySQL Username (e.g. root) \n -p MySQL Password (e.g. 1234) \n -f Output Filename (e.g. Subsecribers.txt)\n" ; 
+
+}
+?>
